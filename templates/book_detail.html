@@ -1,0 +1,22 @@
+<!-- Add this after the price information -->
+<p class="mb-2">
+    <strong>Availability:</strong> 
+    {% if book.quantity > 10 %}
+        <span class="badge bg-success">In Stock ({{ book.quantity }} available)</span>
+    {% elif book.quantity > 0 %}
+        <span class="badge bg-warning text-dark">Low Stock (Only {{ book.quantity }} left)</span>
+    {% else %}
+        <span class="badge bg-danger">Out of Stock</span>
+    {% endif %}
+</p>
+
+<!-- Modify the add to cart form to disable the button when out of stock -->
+<form method="POST" action="{{ url_for('add_to_cart', book_id=book.book_id) }}" class="mb-3">
+    <div class="input-group mb-3" style="max-width: 200px;">
+        <span class="input-group-text">Qty</span>
+        <input type="number" class="form-control" name="quantity" value="1" min="1" max="{{ book.quantity }}" {% if book.quantity <= 0 %}disabled{% endif %}>
+    </div>
+    <button type="submit" class="btn btn-primary" {% if book.quantity <= 0 %}disabled{% endif %}>
+        <i class="fas fa-shopping-cart"></i> Add to Cart
+    </button>
+</form>

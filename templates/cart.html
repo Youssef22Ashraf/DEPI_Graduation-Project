@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block title %}Your Cart - Bookstore{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Your Shopping Cart</h2>
+
+{% if cart_items %}
+<div class="card shadow mb-4">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Book</th>
+                        <th>Price</th>
+                        <th>Quantity</th>
+                        <th>Total</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in cart_items %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                {% if item.cover_url %}
+                                <img src="{{ item.cover_url }}" alt="{{ item.name }}" class="img-thumbnail me-3" style="width: 60px;">
+                                {% else %}
+                                <div class="bg-light me-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 80px;">
+                                    <i class="fas fa-book fa-2x text-secondary"></i>
+                                </div>
+                                {% endif %}
+                                <div>
+                                    <h6 class="mb-0">{{ item.name }}</h6>
+                                    <small class="text-muted">by {{ item.author_name }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>${{ "%.2f"|format(item.price) }}</td>
+                        <td>
+                            <form method="POST" action="{{ url_for('update_cart', cart_id=item.cart_id) }}" class="d-flex align-items-center">
+                                <input type="number" name="quantity" value="{{ item.quantity }}" min="1" max="{{ item.stock }}" class="form-control form-control-sm" style="width: 70px;">
+                                <button type="submit" class="btn btn-sm btn-outline-primary ms-2">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </form>
+                        </td>
+                        <td>${{ "%.2f"|format(item.total_price) }}</td>
+                        <td>
+                            <form method="POST" action="{{ url_for('remove_from_cart', cart_id=item.cart_id) }}">
+                                <button type="submit" class="btn btn-sm btn-danger">
+                                    <i class="fas fa-trash"></i> Remove
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="table-primary">
+                        <th colspan="3" class="text-end">Total:</th>
+                        <th>${{ "%.2f"|format(total) }}</th>
+                        <th></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer d-flex justify-content-between">
+        <a href="{{ url_for('books_page') }}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left"></i> Continue Shopping
+        </a>
+        <a href="{{ url_for('checkout') }}" class="btn btn-success">
+            <i class="fas fa-shopping-cart"></i> Proceed to Checkout
+        </a>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+    <h4 class="alert-heading">Your cart is empty!</h4>
+    <p>Looks like you haven't added any books to your cart yet.</p>
+    <hr>
+    <a href="{{ url_for('books_page') }}" class="btn btn-primary">Browse Books</a>
+</div>
+{% endif %}
+{% endblock %}

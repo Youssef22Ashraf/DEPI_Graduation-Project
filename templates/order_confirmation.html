@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}Order Confirmation - Bookstore{% endblock %}
+
+{% block content %}
+<div class="text-center mb-4">
+    <i class="fas fa-check-circle text-success" style="font-size: 5rem;"></i>
+    <h2 class="mt-3">Thank You for Your Order!</h2>
+    <p class="lead">Your order has been placed successfully.</p>
+</div>
+
+<div class="card shadow mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Order #{{ order.order_id }}</h5>
+    </div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <p><strong>Order Date:</strong> {{ order.order_date.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                <p><strong>Order Status:</strong> <span class="badge bg-success">{{ order.status }}</span></p>
+            </div>
+            <div class="col-md-6 text-md-end">
+                <p><strong>Total Amount:</strong> ${{ "%.2f"|format(order.total_amount) }}</p>
+            </div>
+        </div>
+        
+        <h5 class="border-bottom pb-2 mb-3">Order Items</h5>
+        <div class="table-responsive">
+            <table class="table">
+                <thead class="table-light">
+                    <tr>
+                        <th>Book</th>
+                        <th>Price</th>
+                        <th>Quantity</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in order_items %}
+                    <tr>
+                        <td>{{ item.book_name }}</td>
+                        <td>${{ "%.2f"|format(item.price) }}</td>
+                        <td>{{ item.quantity }}</td>
+                        <td>${{ "%.2f"|format(item.price * item.quantity) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="table-primary">
+                        <th colspan="3" class="text-end">Total:</th>
+                        <th>${{ "%.2f"|format(order.total_amount) }}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer">
+        <div class="d-flex justify-content-between">
+            <a href="{{ url_for('books_page') }}" class="btn btn-primary">
+                <i class="fas fa-book me-2"></i>Continue Shopping
+            </a>
+            <a href="{{ url_for('my_orders') }}" class="btn btn-outline-primary">
+                <i class="fas fa-list me-2"></i>View All Orders
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

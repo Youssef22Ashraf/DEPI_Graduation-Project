@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}Bookstore - Home{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="p-5 mb-4 bg-light rounded-3">
+    <div class="container-fluid py-5">
+        <h1 class="display-5 fw-bold">Welcome to the Bookstore</h1>
+        <p class="col-md-8 fs-4">Discover your next favorite book from our extensive collection.</p>
+        <a href="{{ url_for('books_page') }}" class="btn btn-primary btn-lg">Browse Books</a>
+    </div>
+</div>
+
+<!-- New Arrivals Carousel -->
+<div class="container mb-5">
+    <h2 class="mb-4">New Arrivals</h2>
+    {% if new_books %}
+    <div id="newArrivalsCarousel" class="carousel slide" data-bs-ride="carousel">
+        <div class="carousel-indicators">
+            {% for i in range((new_books|length / 3)|round(0, 'ceil')|int) %}
+            <button type="button" data-bs-target="#newArrivalsCarousel" data-bs-slide-to="{{ i }}" {% if i == 0 %}class="active"{% endif %}></button>
+            {% endfor %}
+        </div>
+        <div class="carousel-inner">
+            {% for i in range(0, new_books|length, 3) %}
+            <div class="carousel-item {% if i == 0 %}active{% endif %}">
+                <div class="row">
+                    {% for book in new_books[i:i+3] %}
+                    <div class="col-md-4">
+                        <div class="card h-100 shadow-sm">
+                            {% if book.cover_url %}
+                            <img src="{{ book.cover_url }}" class="card-img-top" alt="{{ book.name }}" style="height: 300px; object-fit: cover;">
+                            {% else %}
+                            <div class="bg-light d-flex justify-content-center align-items-center" style="height: 300px;">
+                                <i class="fas fa-book fa-4x text-secondary"></i>
+                            </div>
+                            {% endif %}
+                            <div class="card-body">
+                                <h5 class="card-title">{{ book.name }}</h5>
+                                <p class="card-text text-muted">By {{ book.author_name }}</p>
+                                <p class="card-text fw-bold text-primary">${{ "%.2f"|format(book.price) }}</p>
+                                <div class="d-flex justify-content-between">
+                                    <a href="{{ url_for('book_detail', book_id=book.book_id) }}" class="btn btn-outline-primary">View Details</a>
+                                    <form method="POST" action="{{ url_for('add_to_cart', book_id=book.book_id) }}" class="d-inline">
+                                        <input type="hidden" name="quantity" value="1">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-shopping-cart"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <button class="carousel-control-prev" type="button" data-bs-target="#newArrivalsCarousel" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon bg-primary rounded-circle" aria-hidden="true"></span>
+            <span class="visually-hidden">Previous</span>
+        </button>
+        <button class="carousel-control-next" type="button" data-bs-target="#newArrivalsCarousel" data-bs-slide="next">
+            <span class="carousel-control-next-icon bg-primary rounded-circle" aria-hidden="true"></span>
+            <span class="visually-hidden">Next</span>
+        </button>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <p>No new books available at the moment. Check back soon!</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Featured Categories -->
+<div class="container mb-5">
+    <h2 class="mb-4">Browse Categories</h2>
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-book-open fa-3x mb-3"></i>
+                    <h3>Fiction</h3>
+                    <p>Explore worlds of imagination and adventure</p>
+                    <a href="{{ url_for('books_page') }}" class="btn btn-outline-light mt-2">Browse Fiction</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-graduation-cap fa-3x mb-3"></i>
+                    <h3>Non-Fiction</h3>
+                    <p>Discover knowledge and real-world insights</p>
+                    <a href="{{ url_for('books_page') }}" class="btn btn-outline-light mt-2">Browse Non-Fiction</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-info text-white h-100">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-child fa-3x mb-3"></i>
+                    <h3>Children's Books</h3>
+                    <p>Fun and educational books for young readers</p>
+                    <a href="{{ url_for('books_page') }}" class="btn btn-outline-light mt-2">Browse Children's</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize the carousel with a 5-second interval
+        var carousel = new bootstrap.Carousel(document.getElementById('newArrivalsCarousel'), {
+            interval: 5000
+        });
+    });
+</script>
+{% endblock %}
