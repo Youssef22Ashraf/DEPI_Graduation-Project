@@ -1,34 +1,86 @@
-version: '3.8'
+version: '3'
 
 services:
-  web:
-    build: .
+  # PostgreSQL service
+  postgres:
+    image: postgres:13
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=bazarcom
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - bazar-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # Catalog service
+  catalog:
+    build: ./catalog
+    image: youssefashraf265/bazarcom-catalog:latest
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/bazarcom
+      - DOCKER_ENV=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bazar-network
+    restart: on-failure
+
+  # Order service
+  order:
+    build: ./order
+    image: youssefashraf265/bazarcom-order:latest
     ports:
       - "5001:5001"
     environment:
-      - DB_NAME=book_store
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_HOST=db
-      - DB_PORT=5432
-      - SECRET_KEY=your-secret-key-here
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/bazarcom
+      - DOCKER_ENV=true
     depends_on:
-      - db
-    volumes:
-      - .:/app
-    restart: always
+      postgres:
+        condition: service_healthy
+      catalog:
+        condition: service_started
+    networks:
+      - bazar-network
+    restart: on-failure
 
-  db:
-    image: postgres:13
-    environment:
-      - POSTGRES_DB=book_store
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+
+  # Reports service has been removed
+
+  # Core service
+  core:
+    build: ./core
+    image: youssefashraf265/bazarcom-core:latest
     ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: always
+      - "5005:5005"
+    environment:
+      - DOCKER_ENV=true
+      - CATALOG_SERVICE_URL=http://catalog:5000
+      - ORDER_SERVICE_URL=http://order:5001
+    depends_on:
+      catalog:
+        condition: service_started
+      order:
+        condition: service_started
+    networks:
+      - bazar-network
+    restart: on-failure
+
+networks:
+  bazar-network:
+    driver: bridge
 
 volumes:
-  postgres_data:
+  postgres-data:
+    
