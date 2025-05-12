@@ -32,7 +32,12 @@ function getCartFormValues() {
  * Save cart items to localStorage
  */
 function saveCartToLocalStorage() {
-  localStorage.setItem("cartItems", JSON.stringify(cartItems))
+  try {
+    localStorage.setItem("cartItems", JSON.stringify(cartItems))
+    console.log("Cart saved to localStorage:", cartItems)
+  } catch (e) {
+    console.error("Error saving cart to localStorage:", e)
+  }
 }
 
 /**
@@ -56,7 +61,20 @@ function getCartItems() {
  * @param {Object} book - The book object to add to the cart
  */
 function addToCart(book) {
-  cartItems.push(book)
+  // Ensure book has all required properties
+  const bookToAdd = {
+    id: book.id,
+    title: book.title,
+    author: book.author,
+    price: book.price,
+    topic: book.topic || "General",
+    quantity: 1,
+  }
+
+  // Log the book being added
+  console.log("Adding book to cart:", bookToAdd)
+
+  cartItems.push(bookToAdd)
   saveCartToLocalStorage()
   updateCartDisplay()
   updateCartBadge()
@@ -131,12 +149,28 @@ function calculateTotal() {
  * Update the cart display in the UI
  */
 function updateCartDisplay() {
+  console.log("Updating cart display, items:", cartItems)
+
   const cartContainer = document.getElementById("cartItems")
-  if (!cartContainer) return
+  if (!cartContainer) {
+    console.error("Cart container not found in DOM")
+    return
+  }
+
+  // Ensure cartItems is an array and reload from localStorage
+  try {
+    cartItems = JSON.parse(localStorage.getItem("cartItems")) || []
+    console.log("Cart items loaded from localStorage:", cartItems)
+  } catch (e) {
+    console.error("Error parsing cart items from localStorage:", e)
+    cartItems = []
+    saveCartToLocalStorage()
+  }
 
   displaySpecialOffers()
   cartContainer.innerHTML = ""
   if (cartItems.length === 0) {
+    console.log("Cart is empty, displaying empty message")
     cartContainer.innerHTML = '<p class="text-center">Your cart is empty</p>'
     document.getElementById("cartTotal").innerHTML = "$0.00"
     document.getElementById("checkoutBtn").disabled = true
@@ -275,6 +309,12 @@ function checkout() {
     return
   }
 
+  // Clean up any leftover modal backdrops before proceeding
+  document.querySelectorAll(".modal-backdrop").forEach((backdrop) => backdrop.remove())
+  document.body.classList.remove("modal-open")
+  document.body.style.overflow = ""
+  document.body.style.paddingRight = ""
+
   // Show loading overlay
   document.getElementById("loadingOverlay").style.display = "flex"
 
@@ -363,12 +403,31 @@ function processPurchases(items, index, results, purchaseInfo) {
 }
 
 /**
+ * Reset UI state after modal operations
+ * This helps prevent the UI from freezing after modal interactions
+ */
+function resetUIState() {
+  // Remove any modal backdrops
+  document.querySelectorAll(".modal-backdrop").forEach((backdrop) => backdrop.remove())
+
+  // Remove modal open class from body
+  document.body.classList.remove("modal-open")
+
+  // Reset body styles that Bootstrap adds
+  document.body.style.overflow = ""
+  document.body.style.paddingRight = ""
+}
+
+/**
  * Handle the results of all purchase operations
  * @param {Array} results - Results from all purchases
  */
 function handlePurchaseResults(results) {
   // Hide loading overlay
   document.getElementById("loadingOverlay").style.display = "none"
+
+  // Reset UI state first to prevent freezing
+  resetUIState()
 
   const successfulPurchases = results.filter((result) => result.success)
   const failedPurchases = results.filter((result) => !result.success)
@@ -377,7 +436,17 @@ function handlePurchaseResults(results) {
     // Close cart modal
     const cartModalElement = document.getElementById("cartModal")
     const cartModal = bootstrap.Modal.getInstance(cartModalElement)
-    if (cartModal) cartModal.hide()
+    if (cartModal) {
+      cartModal.hide()
+      // Force dispose the cart modal to prevent memory leaks
+      setTimeout(() => {
+        try {
+          cartModal.dispose()
+        } catch (e) {
+          console.log("Cart modal already disposed")
+        }
+      }, 500)
+    }
 
     // Check for discounts
     const discountedPurchase = successfulPurchases.find((result) => result.discount_applied)
@@ -392,11 +461,6 @@ function handlePurchaseResults(results) {
       }
     }
 
-    // Show success modal
-    const successModalElement = document.getElementById("purchaseSuccessModal")
-    const successModal = new bootstrap.Modal(successModalElement)
-    successModal.show()
-
     // Remove successful purchases from cart
     if (successfulPurchases.length === cartItems.length) {
       clearCart()
@@ -408,6 +472,41 @@ function handlePurchaseResults(results) {
       updateCartDisplay()
       updateCartBadge()
     }
+
+    // Show success modal with proper event handling
+    const successModalElement = document.getElementById("purchaseSuccessModal")
+
+    // Ensure any existing modal instance is disposed before creating a new one
+    const existingSuccessModal = bootstrap.Modal.getInstance(successModalElement)
+    if (existingSuccessModal) {
+      try {
+        existingSuccessModal.dispose()
+      } catch (e) {
+        console.log("Success modal already disposed")
+      }
+    }
+
+    const successModal = new bootstrap.Modal(successModalElement)
+
+    // Add event listener for when modal is hidden
+    successModalElement.addEventListener(
+      "hidden.bs.modal",
+      () => {
+        // Reset UI state after modal is closed
+        resetUIState()
+        // Allow time for the DOM to update
+        setTimeout(() => {
+          try {
+            successModal.dispose()
+          } catch (e) {
+            console.log("Success modal already disposed")
+          }
+        }, 300)
+      },
+      { once: true },
+    ) // Use once:true so event listener is automatically removed after execution
+
+    successModal.show()
 
     showToast(`Successfully purchased ${successfulPurchases.length} item(s)!`, "success", 5000)
   }
@@ -422,7 +521,37 @@ function handlePurchaseResults(results) {
     }
 
     const errorModalElement = document.getElementById("purchaseErrorModal")
+
+    // Ensure any existing modal instance is disposed before creating a new one
+    const existingErrorModal = bootstrap.Modal.getInstance(errorModalElement)
+    if (existingErrorModal) {
+      try {
+        existingErrorModal.dispose()
+      } catch (e) {
+        console.log("Error modal already disposed")
+      }
+    }
+
     const errorModal = new bootstrap.Modal(errorModalElement)
+
+    // Add event listener for when modal is hidden
+    errorModalElement.addEventListener(
+      "hidden.bs.modal",
+      () => {
+        // Reset UI state after modal is closed
+        resetUIState()
+        // Allow time for the DOM to update
+        setTimeout(() => {
+          try {
+            errorModal.dispose()
+          } catch (e) {
+            console.log("Error modal already disposed")
+          }
+        }, 300)
+      },
+      { once: true },
+    ) // Use once:true so event listener is automatically removed after execution
+
     errorModal.show()
   }
 }
@@ -498,11 +627,36 @@ function showToast(message, type = "success", duration = 3000) {
  */
 function updateCartBadge() {
   const cartBadge = document.getElementById("cartBadge")
-  if (cartBadge) {
-    cartBadge.textContent = cartItems.length.toString()
-    cartBadge.style.display = cartItems.length > 0 ? "inline-block" : "none"
-  }
+  if (!cartBadge) return
+
+  // If items have quantity property, use it, otherwise count each item as 1
+  const totalItems =
+    cartItems.length > 0 && cartItems[0].quantity
+      ? cartItems.reduce((sum, item) => sum + item.quantity, 0)
+      : cartItems.length
+
+  cartBadge.textContent = totalItems
+  cartBadge.style.display = totalItems > 0 ? "inline-block" : "none"
 }
+
+// Add event listeners to modal close buttons to ensure proper cleanup
+document.addEventListener("DOMContentLoaded", () => {
+  // Add event listeners to all modal close buttons
+  document.querySelectorAll('[data-bs-dismiss="modal"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      // Reset UI state when any modal is manually closed
+      setTimeout(resetUIState, 300)
+    })
+  })
+
+  // Add event listener to continue shopping button in success modal
+  const continueShoppingBtn = document.querySelector("#purchaseSuccessModal .btn-primary")
+  if (continueShoppingBtn) {
+    continueShoppingBtn.addEventListener("click", () => {
+      resetUIState()
+    })
+  }
+})
 
 // Export functions for use in other scripts
 window.addToCart = addToCart
@@ -513,3 +667,4 @@ window.getCartItems = getCartItems
 window.updateCartDisplay = updateCartDisplay
 window.showToast = showToast
 window.updateCartBadge = updateCartBadge
+window.resetUIState = resetUIState // Export the resetUIState function for use in other scripts

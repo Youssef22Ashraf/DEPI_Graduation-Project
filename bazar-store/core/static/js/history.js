@@ -22,12 +22,26 @@ function showPurchaseHistory() {
     return
   }
 
+  // Clean up any existing modal instances first
+  if (window.resetUIState) {
+    window.resetUIState()
+  }
+
   // Get the history modal element
   const historyModalElement = document.getElementById("historyModal")
   if (!historyModalElement) {
     console.error("History modal not found")
     return
   }
+
+  // Ensure any existing modal instance is disposed
+  try {
+    const existingModal = bootstrap.Modal.getInstance(historyModalElement)
+    if (existingModal) existingModal.dispose()
+  } catch (e) {
+    console.log("No existing history modal to dispose")
+  }
+
   const historyModal = new bootstrap.Modal(historyModalElement)
 
   // Show loading indicator
@@ -38,6 +52,26 @@ function showPurchaseHistory() {
   }
   historyContainer.innerHTML =
     '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-3">Loading purchase history...</p></div>'
+
+  // Add event listener for when modal is hidden
+  historyModalElement.addEventListener(
+    "hidden.bs.modal",
+    () => {
+      // Reset UI state after modal is closed
+      if (window.resetUIState) {
+        window.resetUIState()
+      }
+      // Allow time for the DOM to update
+      setTimeout(() => {
+        try {
+          historyModal.dispose()
+        } catch (e) {
+          console.log("History modal already disposed")
+        }
+      }, 300)
+    },
+    { once: true },
+  ) // Use once:true so event listener is automatically removed after execution
 
   // Show the modal
   historyModal.show()
@@ -251,3 +285,6 @@ window.historyModule = {
   showPurchaseHistory,
   showToast,
 }
+
+// Declare bootstrap variable to avoid undefined error
+const bootstrap = window.bootstrap

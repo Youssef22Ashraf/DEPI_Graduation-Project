@@ -8,6 +8,14 @@
  * @param {string} topic - The topic to search for
  */
 function searchBooks(topic) {
+  // Show loading overlay
+  document.getElementById("loadingOverlay").style.display = "flex"
+
+  // Clean up any existing modal instances first
+  if (window.resetUIState) {
+    window.resetUIState()
+  }
+
   // Hide the featured books section when searching
   document.querySelector(".featured-books").style.display = "none"
 

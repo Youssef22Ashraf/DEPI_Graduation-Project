@@ -125,6 +125,20 @@ function initializeEventListeners() {
       if (currentBookId) purchaseBook(currentBookId, shippingAddress, paymentMethod)
     })
   }
+
+  // Add event listeners for modal close buttons to ensure proper cleanup
+  document.querySelectorAll('[data-bs-dismiss="modal"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      // Reset UI state when any modal is manually closed
+      setTimeout(() => {
+        if (window.resetUIState) {
+          window.resetUIState()
+        } else {
+          cleanupModals()
+        }
+      }, 300)
+    })
+  })
 }
 
 /**
@@ -154,6 +168,46 @@ function setupConnectionMonitoring() {
 
   // Initial check
   updateConnectionStatus()
+}
+
+/**
+ * Clean up modal instances and UI state
+ * This helps prevent memory leaks and UI freezing
+ */
+function cleanupModals() {
+  // Remove any modal backdrops
+  document.querySelectorAll(".modal-backdrop").forEach((backdrop) => backdrop.remove())
+
+  // Remove modal open class from body
+  document.body.classList.remove("modal-open")
+
+  // Reset body styles that Bootstrap adds
+  document.body.style.overflow = ""
+  document.body.style.paddingRight = ""
+
+  // Dispose of any open modals
+  const modalElements = [
+    "bookModal",
+    "purchaseConfirmModal",
+    "stockModal",
+    "historyModal",
+    "purchaseSuccessModal",
+    "purchaseErrorModal",
+    "stockSuccessModal",
+    "cartModal",
+  ]
+
+  modalElements.forEach((id) => {
+    const element = document.getElementById(id)
+    if (element) {
+      try {
+        const modalInstance = bootstrap.Modal.getInstance(element)
+        if (modalInstance) modalInstance.dispose()
+      } catch (e) {
+        console.log(`No modal instance for ${id}`)
+      }
+    }
+  })
 }
 
 /**
@@ -728,6 +782,11 @@ function addStock() {
  * Show purchase history
  */
 function showPurchaseHistory() {
+  // Clean up any existing modal instances first
+  if (window.resetUIState) {
+    window.resetUIState()
+  }
+
   fetchWithRetry("/api/orders")
     .then((res) => {
       if (!res.ok) {
@@ -788,12 +847,65 @@ function showPurchaseHistory() {
         historyBody.innerHTML = '<tr><td colspan="4" class="text-center">No purchase history found</td></tr>'
       }
 
+      // Ensure any existing modal instance is disposed
+      try {
+        const existingModal = bootstrap.Modal.getInstance(document.getElementById("historyModal"))
+        if (existingModal) existingModal.dispose()
+      } catch (e) {
+        console.log("No existing history modal to dispose")
+      }
+
+      // Create a new modal instance
+      const historyModalElement = document.getElementById("historyModal")
+      const historyModal = new bootstrap.Modal(historyModalElement)
+
+      // Add event listener for when modal is hidden
+      historyModalElement.addEventListener(
+        "hidden.bs.modal",
+        () => {
+          // Reset UI state after modal is closed
+          if (window.resetUIState) {
+            window.resetUIState()
+          } else {
+            cleanupModals()
+          }
+        },
+        { once: true },
+      )
+
       historyModal.show()
     })
     .catch((error) => {
       console.error("Error fetching purchase history:", error)
       document.getElementById("historyBody").innerHTML =
         '<tr><td colspan="4" class="text-center">Error loading purchase history: ' + error.message + "</td></tr>"
+
+      // Ensure any existing modal instance is disposed
+      try {
+        const existingModal = bootstrap.Modal.getInstance(document.getElementById("historyModal"))
+        if (existingModal) existingModal.dispose()
+      } catch (e) {
+        console.log("No existing history modal to dispose")
+      }
+
+      // Create a new modal instance
+      const historyModalElement = document.getElementById("historyModal")
+      const historyModal = new bootstrap.Modal(historyModalElement)
+
+      // Add event listener for when modal is hidden
+      historyModalElement.addEventListener(
+        "hidden.bs.modal",
+        () => {
+          // Reset UI state after modal is closed
+          if (window.resetUIState) {
+            window.resetUIState()
+          } else {
+            cleanupModals()
+          }
+        },
+        { once: true },
+      )
+
       historyModal.show()
     })
 }
@@ -804,9 +916,15 @@ function showPurchaseHistory() {
 function updateCartBadge() {
   const cartBadge = document.getElementById("cartBadge")
   if (cartBadge) {
-    const count = getCartItems().length
-    cartBadge.textContent = count
-    cartBadge.style.display = count > 0 ? "inline-block" : "none"
+    const cartItems = getCartItems()
+    // If items have quantity property, use it, otherwise count each item as 1
+    const totalItems =
+      cartItems.length > 0 && cartItems[0].quantity
+        ? cartItems.reduce((sum, item) => sum + item.quantity, 0)
+        : cartItems.length
+
+    cartBadge.textContent = totalItems
+    cartBadge.style.display = totalItems > 0 ? "inline-block" : "none"
   }
 }
 
@@ -895,3 +1013,4 @@ window.showBookDetails = showBookDetails
 window.updateCartBadge = updateCartBadge
 window.showPurchaseHistory = showPurchaseHistory
 window.showToast = showToast
+window.cleanupModals = cleanupModals
