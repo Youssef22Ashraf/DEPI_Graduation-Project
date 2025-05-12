@@ -1,119 +1,112 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify
 import requests
-import json
 import os
+import time
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates', static_folder='static')
 
-# Check if running in Docker or locally
+# Configure service URLs based on environment
 if os.environ.get('DOCKER_ENV') == 'true':
-    # Docker environment - use service names
-    CATALOG_SERVICE_URL = "http://catalog:5000"
-    ORDER_SERVICE_URL = "http://order:5001"
+    CATALOG_SERVICE_URL = os.environ.get('CATALOG_SERVICE_URL', "http://catalog:5000")
+    ORDER_SERVICE_URL = os.environ.get('ORDER_SERVICE_URL', "http://order:5001")
 else:
-    # Local environment - use localhost
-    CATALOG_SERVICE_URL = "http://localhost:5000"
-    ORDER_SERVICE_URL = "http://localhost:5001"
+    CATALOG_SERVICE_URL = os.environ.get('CATALOG_SERVICE_URL', "http://localhost:5000")
+    ORDER_SERVICE_URL = os.environ.get('ORDER_SERVICE_URL', "http://localhost:5001")
+
+# Set a timeout for API requests to prevent hanging
+REQUEST_TIMEOUT = 5  # seconds
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    """Render the main page"""
+    # Pass the service URLs to the template
+    return render_template('index.html', 
+                          catalog_url=CATALOG_SERVICE_URL,
+                          order_url=ORDER_SERVICE_URL)
 
-@app.route('/api/search/<topic>', methods=['GET'])
+@app.route('/api/search/<topic>')
 def search(topic):
+    """Search for books by topic"""
     try:
-        response = requests.get(f"{CATALOG_SERVICE_URL}/search/{topic}", timeout=10)
-        if response.status_code == 200:
-            return jsonify(response.json())
-        else:
-            error_message = f"Catalog service returned status code: {response.status_code}"
-            print(error_message)
-            return jsonify({"error": error_message, "books": []}), response.status_code
-    except requests.exceptions.Timeout:
-        error_message = "Request to catalog service timed out"
-        print(error_message)
-        return jsonify({"error": error_message, "books": []}), 504
-    except requests.exceptions.ConnectionError:
-        error_message = "Failed to connect to catalog service"
-        print(error_message)
-        return jsonify({"error": error_message, "books": []}), 503
-    except Exception as e:
-        error_message = f"Error searching for books: {str(e)}"
-        print(error_message)
-        return jsonify({"error": error_message, "books": []}), 500
+        response = requests.get(f"{CATALOG_SERVICE_URL}/search/{topic}", timeout=REQUEST_TIMEOUT)
+        return jsonify(response.json())
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Error in search endpoint: {str(e)}")
+        return jsonify({'error': str(e), 'books': []}), 500
 
-@app.route('/api/search/recommended', methods=['GET'])
+@app.route('/api/search/recommended')
 def recommended():
-    # Get recommended books from catalog service
+    """Get recommended books"""
     try:
-        response = requests.get(f"{CATALOG_SERVICE_URL}/search/programming", timeout=10)
-        if response.status_code == 200:
-            return jsonify(response.json())
-        else:
-            error_message = f"Catalog service returned status code: {response.status_code}"
-            print(error_message)
-            return jsonify({"error": error_message, "books": []}), response.status_code
-    except requests.exceptions.Timeout:
-        error_message = "Request to catalog service timed out"
-        print(error_message)
-        return jsonify({"error": error_message, "books": []}), 504
-    except requests.exceptions.ConnectionError:
-        error_message = "Failed to connect to catalog service"
-        print(error_message)
-        return jsonify({"error": error_message, "books": []}), 503
-    except Exception as e:
-        error_message = f"Error fetching recommended books: {str(e)}"
-        print(error_message)
-        return jsonify({"error": error_message, "books": []}), 500
+        response = requests.get(f"{CATALOG_SERVICE_URL}/search/programming", timeout=REQUEST_TIMEOUT)
+        return jsonify(response.json())
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Error in recommended endpoint: {str(e)}")
+        return jsonify({'error': str(e), 'books': []}), 500
 
-@app.route('/api/info/<int:item_id>', methods=['GET'])
+@app.route('/api/info/<item_id>')
 def info(item_id):
-    response = requests.get(f"{CATALOG_SERVICE_URL}/info/{item_id}")
-    return jsonify(response.json())
+    """Get book details"""
+    try:
+        response = requests.get(f"{CATALOG_SERVICE_URL}/info/{item_id}", timeout=REQUEST_TIMEOUT)
+        return jsonify(response.json()), response.status_code
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Error in info endpoint: {str(e)}")
+        return jsonify({'error': str(e), 'book': None}), 500
+
+@app.route('/api/purchase/<item_id>', methods=['POST'])
+def purchase(item_id):
+    """Process a purchase"""
+    try:
+        response = requests.post(f"{ORDER_SERVICE_URL}/purchase/{item_id}", 
+                                json=request.json, 
+                                timeout=REQUEST_TIMEOUT)
+        return jsonify(response.json()), response.status_code
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Error in purchase endpoint: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/catalog/add-stock', methods=['POST'])
 def add_stock():
-    # Forward the stock data to the catalog service
-    response = requests.post(
-        f"{CATALOG_SERVICE_URL}/add-stock",
-        json=request.json
-    )
-    return jsonify(response.json()), response.status_code
-
-@app.route('/api/purchase/<int:item_id>', methods=['POST'])
-def purchase(item_id):
-    # Get purchase data from request
-    purchase_data = request.json
-    
-    # Forward the purchase data to the order service
-    response = requests.post(
-        f"{ORDER_SERVICE_URL}/purchase/{item_id}",
-        json=purchase_data
-    )
-    return jsonify(response.json()), response.status_code
+    """Add stock to a book"""
+    try:
+        response = requests.post(f"{CATALOG_SERVICE_URL}/add-stock", 
+                                json=request.json, 
+                                timeout=REQUEST_TIMEOUT)
+        return jsonify(response.json()), response.status_code
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Error in add-stock endpoint: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/orders', methods=['GET'])
 def get_orders():
-    # Forward request to order service
-    response = requests.get(f"{ORDER_SERVICE_URL}/orders")
-    return jsonify(response.json()), response.status_code
+    """Get all orders"""
+    try:
+        response = requests.get(f"{ORDER_SERVICE_URL}/orders", timeout=REQUEST_TIMEOUT)
+        return jsonify(response.json()), response.status_code
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Error in orders endpoint: {str(e)}")
+        return jsonify({'error': str(e), 'orders': []}), 500
 
 @app.route('/api/orders/<order_id>', methods=['GET'])
 def get_order_details(order_id):
-    # Forward request to order service
-    response = requests.get(f"{ORDER_SERVICE_URL}/orders/{order_id}")
-    return jsonify(response.json()), response.status_code
+    """Get details for a specific order"""
+    try:
+        response = requests.get(f"{ORDER_SERVICE_URL}/orders/{order_id}", timeout=REQUEST_TIMEOUT)
+        return jsonify(response.json()), response.status_code
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Error in order details endpoint: {str(e)}")
+        return jsonify({'error': str(e), 'items': []}), 500
 
 @app.route('/api/history', methods=['GET'])
-def purchase_history():
-    # Redirect to the orders endpoint for backward compatibility
-    response = requests.get(f"{ORDER_SERVICE_URL}/orders")
-    return jsonify(response.json()), response.status_code
+def history():
+    """Legacy route for purchase history"""
+    return get_orders()
 
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory(os.path.join(app.root_path, 'static'),
-                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint"""
+    return jsonify({'status': 'ok'})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5005)

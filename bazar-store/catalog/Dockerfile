@@ -8,4 +8,6 @@ RUN pip install --no-cache-dir psycopg2-binary
 
 COPY . .
 
+EXPOSE 5000
+
 CMD ["python", "app.py"]

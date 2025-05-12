@@ -1,7 +1,6 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: dev
+  name: bazarstore-dev
   labels:
-    name: dev
     environment: development

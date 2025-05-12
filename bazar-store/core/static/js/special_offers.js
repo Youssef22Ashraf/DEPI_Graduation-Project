@@ -4,23 +4,40 @@
  */
 
 // Store the current cart items
-// Initialize from localStorage if available
-let cartItems = JSON.parse(localStorage.getItem('cartItems')) || [];
+let cartItems = JSON.parse(localStorage.getItem("cartItems")) || []
 
 // Special offer configuration
 const specialOffers = {
-    sameCategory: {
-        minItems: 2,  // Minimum number of items from the same category to qualify
-        discountPercentage: 15,  // 15% discount
-        description: "Buy 2 or more books from the same category and get 15% off!"
-    }
-};
+  sameCategory: {
+    minItems: 2,
+    discountPercentage: 15,
+    description: "Buy 2 or more books from the same category and get 15% off!",
+  },
+}
+
+/**
+ * Get form field values from the cart modal
+ * @returns {Object} - Object containing form field values
+ */
+function getCartFormValues() {
+  return {
+    shippingAddress: document.getElementById("cart-shipping-address")?.value.trim(),
+    paymentMethod: document.getElementById("cart-payment-method")?.value,
+    customerEmail: document.getElementById("cart-customer-email")?.value.trim(),
+    phoneNumber: document.getElementById("cart-phone-number")?.value.trim() || "",
+  }
+}
 
 /**
  * Save cart items to localStorage
  */
 function saveCartToLocalStorage() {
-    localStorage.setItem('cartItems', JSON.stringify(cartItems));
+  try {
+    localStorage.setItem("cartItems", JSON.stringify(cartItems))
+    console.log("Cart saved to localStorage:", cartItems)
+  } catch (e) {
+    console.error("Error saving cart to localStorage:", e)
+  }
 }
 
 /**
@@ -28,9 +45,15 @@ function saveCartToLocalStorage() {
  * @returns {Array} - Array of special offer descriptions
  */
 function getSpecialOffers() {
-    return [
-        specialOffers.sameCategory.description
-    ];
+  return [specialOffers.sameCategory.description]
+}
+
+/**
+ * Get cart items
+ * @returns {Array} - Array of cart items
+ */
+function getCartItems() {
+  return cartItems
 }
 
 /**
@@ -38,9 +61,24 @@ function getSpecialOffers() {
  * @param {Object} book - The book object to add to the cart
  */
 function addToCart(book) {
-    cartItems.push(book);
-    saveCartToLocalStorage();
-    updateCartDisplay();
+  // Ensure book has all required properties
+  const bookToAdd = {
+    id: book.id,
+    title: book.title,
+    author: book.author,
+    price: book.price,
+    topic: book.topic || "General",
+    quantity: 1,
+  }
+
+  // Log the book being added
+  console.log("Adding book to cart:", bookToAdd)
+
+  cartItems.push(bookToAdd)
+  saveCartToLocalStorage()
+  updateCartDisplay()
+  updateCartBadge()
+  showToast("Book added to cart!", "success")
 }
 
 /**
@@ -48,18 +86,22 @@ function addToCart(book) {
  * @param {number} index - The index of the book to remove
  */
 function removeFromCart(index) {
-    cartItems.splice(index, 1);
-    saveCartToLocalStorage();
-    updateCartDisplay();
+  cartItems.splice(index, 1)
+  saveCartToLocalStorage()
+  updateCartDisplay()
+  updateCartBadge()
+  showToast("Book removed from cart", "info")
 }
 
 /**
  * Clear the cart
  */
 function clearCart() {
-    cartItems = [];
-    saveCartToLocalStorage();
-    updateCartDisplay();
+  cartItems = []
+  saveCartToLocalStorage()
+  updateCartDisplay()
+  updateCartBadge()
+  showToast("Cart cleared", "info")
 }
 
 /**
@@ -67,397 +109,474 @@ function clearCart() {
  * @returns {Object} - Object containing subtotal, discount, and total
  */
 function calculateTotal() {
-    // Group books by category
-    const booksByCategory = {};
-    
-    // Calculate subtotal and group books
-    let subtotal = 0;
-    cartItems.forEach(book => {
-        subtotal += parseFloat(book.price);
-        
-        // Group by category
-        if (!booksByCategory[book.topic]) {
-            booksByCategory[book.topic] = [];
-        }
-        booksByCategory[book.topic].push(book);
-    });
-    
-    // Check for special offers
-    let discount = 0;
-    let appliedOffers = [];
-    
-    // Check for same category discount
-    for (const category in booksByCategory) {
-        const booksInCategory = booksByCategory[category];
-        if (booksInCategory.length >= specialOffers.sameCategory.minItems) {
-            // Calculate discount for this category
-            const categorySubtotal = booksInCategory.reduce((sum, book) => sum + parseFloat(book.price), 0);
-            const categoryDiscount = categorySubtotal * (specialOffers.sameCategory.discountPercentage / 100);
-            discount += categoryDiscount;
-            
-            appliedOffers.push({
-                type: 'sameCategory',
-                category: category,
-                count: booksInCategory.length,
-                discount: categoryDiscount
-            });
-        }
+  const booksByCategory = {}
+  let subtotal = 0
+  cartItems.forEach((book) => {
+    subtotal += Number.parseFloat(book.price)
+    if (!booksByCategory[book.topic]) {
+      booksByCategory[book.topic] = []
     }
-    
-    // Calculate final total
-    const total = subtotal - discount;
-    
-    return {
-        subtotal: subtotal.toFixed(2),
-        discount: discount.toFixed(2),
-        total: total.toFixed(2),
-        appliedOffers: appliedOffers
-    };
+    booksByCategory[book.topic].push(book)
+  })
+
+  let discount = 0
+  const appliedOffers = []
+  for (const category in booksByCategory) {
+    const booksInCategory = booksByCategory[category]
+    if (booksInCategory.length >= specialOffers.sameCategory.minItems) {
+      const categorySubtotal = booksInCategory.reduce((sum, book) => sum + Number.parseFloat(book.price), 0)
+      const categoryDiscount = categorySubtotal * (specialOffers.sameCategory.discountPercentage / 100)
+      discount += categoryDiscount
+      appliedOffers.push({
+        type: "sameCategory",
+        category: category,
+        count: booksInCategory.length,
+        discount: categoryDiscount,
+      })
+    }
+  }
+
+  const total = subtotal - discount
+  return {
+    subtotal: subtotal.toFixed(2),
+    discount: discount.toFixed(2),
+    total: total.toFixed(2),
+    appliedOffers: appliedOffers,
+  }
 }
 
 /**
  * Update the cart display in the UI
  */
 function updateCartDisplay() {
-    const cartContainer = document.getElementById('cartItems');
-    if (!cartContainer) return;
-    
-    // Update cart badge count
-    const cartBadge = document.getElementById('cartBadge');
-    if (cartBadge) {
-        cartBadge.textContent = cartItems.length;
-        cartBadge.style.display = cartItems.length > 0 ? 'inline-block' : 'none';
-        
-        // Add animation class if items were added
-        if (cartItems.length > 0) {
-            cartBadge.classList.add('animate__animated', 'animate__bounceIn');
-            setTimeout(() => {
-                cartBadge.classList.remove('animate__animated', 'animate__bounceIn');
-            }, 1000);
-        }
-    }
-    
-    // Display available special offers
-    displaySpecialOffers();
-    
-    // Clear current cart display
-    cartContainer.innerHTML = '';
-    
-    if (cartItems.length === 0) {
-        cartContainer.innerHTML = '<p class="text-center">Your cart is empty</p>';
-        document.getElementById('cartTotal').innerHTML = '$0.00';
-        document.getElementById('checkoutBtn').disabled = true;
-        
-        // Hide discount section if visible
-        const discountSection = document.getElementById('discountSection');
-        if (discountSection) discountSection.style.display = 'none';
-        
-        return;
-    }
-    
-    // Add each item to the cart display
-    cartItems.forEach((book, index) => {
-        const itemElement = document.createElement('div');
-        itemElement.className = 'cart-item d-flex justify-content-between align-items-center mb-2';
-        itemElement.innerHTML = `
+  console.log("Updating cart display, items:", cartItems)
+
+  const cartContainer = document.getElementById("cartItems")
+  if (!cartContainer) {
+    console.error("Cart container not found in DOM")
+    return
+  }
+
+  // Ensure cartItems is an array and reload from localStorage
+  try {
+    cartItems = JSON.parse(localStorage.getItem("cartItems")) || []
+    console.log("Cart items loaded from localStorage:", cartItems)
+  } catch (e) {
+    console.error("Error parsing cart items from localStorage:", e)
+    cartItems = []
+    saveCartToLocalStorage()
+  }
+
+  displaySpecialOffers()
+  cartContainer.innerHTML = ""
+  if (cartItems.length === 0) {
+    console.log("Cart is empty, displaying empty message")
+    cartContainer.innerHTML = '<p class="text-center">Your cart is empty</p>'
+    document.getElementById("cartTotal").innerHTML = "$0.00"
+    document.getElementById("checkoutBtn").disabled = true
+    const discountSection = document.getElementById("discountSection")
+    if (discountSection) discountSection.style.display = "none"
+    return
+  }
+
+  cartItems.forEach((book, index) => {
+    const itemElement = document.createElement("div")
+    itemElement.className = "cart-item d-flex justify-content-between align-items-center mb-2"
+    itemElement.innerHTML = `
             <div>
                 <h6 class="mb-0">${book.title}</h6>
                 <small class="text-muted">${book.author}</small>
             </div>
             <div class="d-flex align-items-center">
-                <span class="me-3">$${parseFloat(book.price).toFixed(2)}</span>
+                <span class="me-3">$${Number.parseFloat(book.price).toFixed(2)}</span>
                 <button class="btn btn-sm btn-outline-danger" onclick="removeFromCart(${index})">
                     <i class="bi bi-trash"></i>
                 </button>
             </div>
-        `;
-        cartContainer.appendChild(itemElement);
-    });
-    
-    // Calculate and display total
-    const totals = calculateTotal();
-    
-    // Update or create discount section
-    let discountSection = document.getElementById('discountSection');
-    if (!discountSection) {
-        discountSection = document.createElement('div');
-        discountSection.id = 'discountSection';
-        discountSection.className = 'mt-3 mb-3';
-        document.getElementById('cartContainer').insertBefore(discountSection, document.getElementById('cartFooter'));
+        `
+    cartContainer.appendChild(itemElement)
+  })
+
+  const totals = calculateTotal()
+  let discountSection = document.getElementById("discountSection")
+  if (!discountSection) {
+    discountSection = document.createElement("div")
+    discountSection.id = "discountSection"
+    discountSection.className = "mt-3 mb-3"
+    const cartContainer = document.getElementById("cartContainer")
+    if (cartContainer) {
+      cartContainer.insertBefore(
+        discountSection,
+        document.querySelector(".d-flex.justify-content-between.align-items-center.border-top"),
+      )
     }
-    
-    // Show or hide discount section based on whether there's a discount
-    if (parseFloat(totals.discount) > 0) {
-        let discountHtml = '<div class="alert alert-success">';
-        discountHtml += '<h6 class="alert-heading">Special Offers Applied!</h6>';
-        
-        // Display each applied offer
-        totals.appliedOffers.forEach(offer => {
-            if (offer.type === 'sameCategory') {
-                discountHtml += `<p class="mb-0 small">Category Discount: ${specialOffers.sameCategory.discountPercentage}% off ${offer.count} books in "${offer.category}" category</p>`;
-            }
-        });
-        
-        discountHtml += '</div>';
-        discountHtml += `<div class="d-flex justify-content-between">
+  }
+
+  if (Number.parseFloat(totals.discount) > 0) {
+    let discountHtml = '<div class="alert alert-success">'
+    discountHtml += '<h6 class="alert-heading">Special Offers Applied!</h6>'
+    totals.appliedOffers.forEach((offer) => {
+      if (offer.type === "sameCategory") {
+        discountHtml += `<p class="mb-0 small">Category Discount: ${specialOffers.sameCategory.discountPercentage}% off ${offer.count} books in "${offer.category}" category</p>`
+      }
+    })
+    discountHtml += "</div>"
+    discountHtml += `<div class="d-flex justify-content-between">
             <span>Subtotal:</span>
             <span>$${totals.subtotal}</span>
-        </div>`;
-        discountHtml += `<div class="d-flex justify-content-between text-success">
+        </div>`
+    discountHtml += `<div class="d-flex justify-content-between text-success">
             <span>Discount:</span>
             <span>-$${totals.discount}</span>
-        </div>`;
-        
-        discountSection.innerHTML = discountHtml;
-        discountSection.style.display = 'block';
-    } else {
-        discountSection.style.display = 'none';
-    }
-    
-    // Update total
-    document.getElementById('cartTotal').innerHTML = `$${totals.total}`;
-    document.getElementById('checkoutBtn').disabled = false;
+        </div>`
+    discountSection.innerHTML = discountHtml
+    discountSection.style.display = "block"
+  } else {
+    discountSection.style.display = "none"
+  }
+
+  document.getElementById("cartTotal").innerHTML = `$${totals.total}`
+  document.getElementById("checkoutBtn").disabled = false
 }
 
 /**
  * Process the checkout
  */
 function checkout() {
-    if (cartItems.length === 0) {
-        // Show a message if cart is empty
-        const errorMessage = document.getElementById('errorMessage') || document.createElement('div');
-        errorMessage.textContent = 'Your cart is empty. Please add items before checkout.';
-        const errorModal = new bootstrap.Modal(document.getElementById('purchaseErrorModal'));
-        errorModal.show();
-        return;
+  if (cartItems.length === 0) {
+    showToast("Your cart is empty. Please add items before checkout.", "danger", 5000)
+    return
+  }
+
+  const { shippingAddress, paymentMethod, customerEmail, phoneNumber } = getCartFormValues()
+  let isValid = true
+
+  // Reset validation state
+  const formFields = ["cart-shipping-address", "cart-payment-method", "cart-customer-email"]
+  formFields.forEach((field) => {
+    const element = document.getElementById(field)
+    if (element) {
+      element.classList.remove("is-invalid")
     }
-    
-    // Get shipping and payment information
-    const shippingAddress = document.getElementById('shippingAddress').value.trim();
-    const paymentMethod = document.getElementById('paymentMethod').value;
-    const customerEmail = document.getElementById('customerEmail') ? document.getElementById('customerEmail').value.trim() : '';
-    const phoneNumber = document.getElementById('phoneNumber') ? document.getElementById('phoneNumber').value.trim() : '';
-    let isValid = true;
-    
-    // Reset validation state for all fields
-    const formFields = ['shippingAddress', 'paymentMethod', 'customerEmail', 'phoneNumber'];
-    formFields.forEach(field => {
-        const element = document.getElementById(field);
-        if (element) {
-            element.classList.remove('is-invalid');
-            const feedbackElement = document.getElementById(`${field}Feedback`);
-            if (feedbackElement) feedbackElement.textContent = '';
-        }
-    });
-    
-    // Validate shipping address (must be at least 10 characters)
-    if (!shippingAddress || shippingAddress.length < 10) {
-        const element = document.getElementById('shippingAddress');
-        element.classList.add('is-invalid');
-        const feedbackElement = document.getElementById('shippingAddressFeedback');
-        if (feedbackElement) {
-            feedbackElement.textContent = !shippingAddress ? 'Shipping address is required' : 'Please enter a complete address (at least 10 characters)';
-        }
-        isValid = false;
+  })
+
+  // Validate shipping address
+  if (!shippingAddress || shippingAddress.length < 5) {
+    const element = document.getElementById("cart-shipping-address")
+    if (element) {
+      element.classList.add("is-invalid")
+      isValid = false
     }
-    
-    // Validate payment method
-    if (!paymentMethod) {
-        const element = document.getElementById('paymentMethod');
-        element.classList.add('is-invalid');
-        const feedbackElement = document.getElementById('paymentMethodFeedback');
-        if (feedbackElement) feedbackElement.textContent = 'Please select a payment method';
-        isValid = false;
+  }
+
+  // Validate payment method
+  if (!paymentMethod) {
+    const element = document.getElementById("cart-payment-method")
+    if (element) {
+      element.classList.add("is-invalid")
+      isValid = false
     }
-    
-    // Validate email if present in the form
-    if (document.getElementById('customerEmail')) {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!customerEmail || !emailRegex.test(customerEmail)) {
-            const element = document.getElementById('customerEmail');
-            element.classList.add('is-invalid');
-            const feedbackElement = document.getElementById('customerEmailFeedback');
-            if (feedbackElement) {
-                feedbackElement.textContent = !customerEmail ? 'Email is required' : 'Please enter a valid email address';
-            }
-            isValid = false;
-        }
+  }
+
+  // Validate email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!customerEmail || !emailRegex.test(customerEmail)) {
+    const element = document.getElementById("cart-customer-email")
+    if (element) {
+      element.classList.add("is-invalid")
+      isValid = false
     }
-    
-    // Validate phone number if present in the form
-    if (document.getElementById('phoneNumber')) {
-        const phoneRegex = /^[+]?[(]?[0-9]{3}[)]?[-\s.]?[0-9]{3}[-\s.]?[0-9]{4,6}$/;
-        if (phoneNumber && !phoneRegex.test(phoneNumber)) {
-            const element = document.getElementById('phoneNumber');
-            element.classList.add('is-invalid');
-            const feedbackElement = document.getElementById('phoneNumberFeedback');
-            if (feedbackElement) {
-                feedbackElement.textContent = 'Please enter a valid phone number';
-            }
-            isValid = false;
-        }
+  }
+
+  // Validate phone (if provided)
+  if (phoneNumber) {
+    const phoneRegex = /^[+]?[(]?[0-9]{3}[)]?[-\s.]?[0-9]{3}[-\s.]?[0-9]{4,6}$/
+    if (!phoneRegex.test(phoneNumber)) {
+      const element = document.getElementById("cart-phone-number")
+      if (element) {
+        element.classList.add("is-invalid")
+        isValid = false
+      }
     }
-    
-    if (!isValid) {
-        // Add shake animation to invalid fields for better user feedback
-        const invalidFields = document.querySelectorAll('.is-invalid');
-        invalidFields.forEach(field => {
-            field.classList.add('animate__animated', 'animate__shakeX');
-            setTimeout(() => {
-                field.classList.remove('animate__animated', 'animate__shakeX');
-            }, 1000);
-        });
-        
-        // Focus on the first invalid field
-        if (invalidFields.length > 0) {
-            invalidFields[0].focus();
-        }
-        
-        // Show validation error toast
-        showToast('Please correct the highlighted fields before proceeding', 'danger', 5000);
-        
-        return;
+  }
+
+  if (!isValid) {
+    const invalidFields = document.querySelectorAll(".is-invalid")
+    if (invalidFields.length > 0) {
+      invalidFields[0].focus()
     }
-    
-    // Calculate totals and discounts
-    const totals = calculateTotal();
-    const purchasePromises = [];
-    
-    // Group books by category for discount calculation
-    const booksByCategory = {};
-    cartItems.forEach(book => {
-        if (!booksByCategory[book.topic]) {
-            booksByCategory[book.topic] = [];
-        }
-        booksByCategory[book.topic].push(book);
-    });
-    
-    // Process each book purchase with the appropriate discount information
-    cartItems.forEach(book => {
-        // Check if this book is part of a category discount
-        const categoryDiscount = booksByCategory[book.topic].length >= specialOffers.sameCategory.minItems;
-        
-        // Create purchase data object with discount information
-        const purchaseData = {
-            shipping_address: shippingAddress,
-            payment_method: paymentMethod,
-            customer_email: customerEmail || '',
-            phone_number: phoneNumber || '',
-            cart_items: cartItems.map(item => ({
-                id: item.id,
-                topic: item.topic,
-                price: item.price
-            })),
-            discount_info: {
-                has_discount: categoryDiscount,
-                category: book.topic,
-                category_count: booksByCategory[book.topic].length,
-                discount_percentage: specialOffers.sameCategory.discountPercentage
-            }
-        };
-        
-        // Make the purchase request
-        const promise = fetch(`/api/purchase/${book.id}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(purchaseData)
+    showToast("Please correct the highlighted fields before proceeding", "danger", 5000)
+    return
+  }
+
+  // Clean up any leftover modal backdrops before proceeding
+  document.querySelectorAll(".modal-backdrop").forEach((backdrop) => backdrop.remove())
+  document.body.classList.remove("modal-open")
+  document.body.style.overflow = ""
+  document.body.style.paddingRight = ""
+
+  // Show loading overlay
+  document.getElementById("loadingOverlay").style.display = "flex"
+
+  // Calculate totals and prepare discount info
+  const totals = calculateTotal()
+  const booksByCategory = {}
+
+  // Group books by category
+  cartItems.forEach((book) => {
+    if (!booksByCategory[book.topic]) {
+      booksByCategory[book.topic] = []
+    }
+    booksByCategory[book.topic].push(book)
+  })
+
+  // Process each book purchase sequentially
+  processPurchases(cartItems, 0, [], {
+    shippingAddress,
+    paymentMethod,
+    customerEmail,
+    phoneNumber,
+    booksByCategory,
+  })
+}
+
+/**
+ * Process purchases sequentially to avoid race conditions
+ * @param {Array} items - Cart items to purchase
+ * @param {number} index - Current item index
+ * @param {Array} results - Results from previous purchases
+ * @param {Object} purchaseInfo - Common purchase information
+ */
+function processPurchases(items, index, results, purchaseInfo) {
+  if (index >= items.length) {
+    // All purchases completed
+    handlePurchaseResults(results)
+    return
+  }
+
+  const book = items[index]
+  const { shippingAddress, paymentMethod, customerEmail, phoneNumber, booksByCategory } = purchaseInfo
+
+  // Check if category discount applies
+  const categoryDiscount = booksByCategory[book.topic].length >= specialOffers.sameCategory.minItems
+
+  const purchaseData = {
+    shipping_address: shippingAddress,
+    payment_method: paymentMethod,
+    customer_email: customerEmail,
+    phone_number: phoneNumber,
+    discount_info: {
+      has_discount: categoryDiscount,
+      category: book.topic,
+      category_count: booksByCategory[book.topic].length,
+      discount_percentage: specialOffers.sameCategory.discountPercentage,
+    },
+  }
+
+  // Make the purchase request
+  fetch(`/api/purchase/${book.id}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(purchaseData),
+  })
+    .then((res) => {
+      if (!res.ok) {
+        return res.json().then((errData) => {
+          throw new Error(errData.message || `Error: ${res.status} ${res.statusText}`)
         })
-        .then(res => {
-            if (!res.ok) {
-                return res.json().then(errData => {
-                    throw new Error(errData.message || `Error: ${res.status} ${res.statusText}`);
-                });
-            }
-            return res.json();
-        });
-        
-        purchasePromises.push(promise);
-    });
-    
-    // Wait for all purchases to complete
-    Promise.all(purchasePromises)
-        .then(results => {
-            // Check if all purchases were successful
-            const allSuccessful = results.every(result => result.success);
-            
-            if (allSuccessful) {
-                // Show success message with discount information
-                const cartModal = bootstrap.Modal.getInstance(document.getElementById('cartModal'));
-                if (cartModal) cartModal.hide();
-                
-                // Check if any purchase had a discount applied
-                const discountedPurchase = results.find(result => result.discount_applied);
-                
-                // Show discount information if applicable
-                if (discountedPurchase) {
-                    const discountInfoElement = document.getElementById('purchaseDiscountInfo');
-                    const discountMessageElement = document.getElementById('discountMessage');
-                    
-                    if (discountInfoElement && discountMessageElement) {
-                        discountInfoElement.style.display = 'block';
-                        discountMessageElement.textContent = discountedPurchase.discount_message || 
-                            `You saved $${discountedPurchase.discount_amount.toFixed(2)} with our ${discountedPurchase.discount_percentage}% category discount!`;
-                    }
-                }
-                
-                // Show success modal instead of alert
-                const successModal = new bootstrap.Modal(document.getElementById('purchaseSuccessModal'));
-                successModal.show();
-                
-                // Clear the cart
-                clearCart();
-            } else {
-                // Show error message
-                const errorMessage = document.getElementById('errorMessage');
-                if (errorMessage) {
-                    errorMessage.textContent = 'Some purchases could not be completed. Please try again.';
-                }
-                const errorModal = new bootstrap.Modal(document.getElementById('purchaseErrorModal'));
-                errorModal.show();
-            }
-        })
-        .catch(error => {
-            console.error('Purchase error:', error);
-            const errorMessage = document.getElementById('errorMessage');
-            if (errorMessage) {
-                errorMessage.textContent = 'Error processing purchases: ' + error.message;
-            }
-            const errorModal = new bootstrap.Modal(document.getElementById('purchaseErrorModal'));
-            errorModal.show();
-        });
+      }
+      return res.json()
+    })
+    .then((result) => {
+      // Add result and process next item
+      results.push(result)
+      processPurchases(items, index + 1, results, purchaseInfo)
+    })
+    .catch((error) => {
+      console.error(`Error purchasing ${book.title}:`, error)
+      // Add error result and continue with next item
+      results.push({ success: false, error: error.message, book: book })
+      processPurchases(items, index + 1, results, purchaseInfo)
+    })
+}
+
+/**
+ * Reset UI state after modal operations
+ * This helps prevent the UI from freezing after modal interactions
+ */
+function resetUIState() {
+  // Remove any modal backdrops
+  document.querySelectorAll(".modal-backdrop").forEach((backdrop) => backdrop.remove())
+
+  // Remove modal open class from body
+  document.body.classList.remove("modal-open")
+
+  // Reset body styles that Bootstrap adds
+  document.body.style.overflow = ""
+  document.body.style.paddingRight = ""
+}
+
+/**
+ * Handle the results of all purchase operations
+ * @param {Array} results - Results from all purchases
+ */
+function handlePurchaseResults(results) {
+  // Hide loading overlay
+  document.getElementById("loadingOverlay").style.display = "none"
+
+  // Reset UI state first to prevent freezing
+  resetUIState()
+
+  const successfulPurchases = results.filter((result) => result.success)
+  const failedPurchases = results.filter((result) => !result.success)
+
+  if (successfulPurchases.length > 0) {
+    // Close cart modal
+    const cartModalElement = document.getElementById("cartModal")
+    const cartModal = bootstrap.Modal.getInstance(cartModalElement)
+    if (cartModal) {
+      cartModal.hide()
+      // Force dispose the cart modal to prevent memory leaks
+      setTimeout(() => {
+        try {
+          cartModal.dispose()
+        } catch (e) {
+          console.log("Cart modal already disposed")
+        }
+      }, 500)
+    }
+
+    // Check for discounts
+    const discountedPurchase = successfulPurchases.find((result) => result.discount_applied)
+    if (discountedPurchase) {
+      const discountInfoElement = document.getElementById("purchaseDiscountInfo")
+      const discountMessageElement = document.getElementById("discountMessage")
+      if (discountInfoElement && discountMessageElement) {
+        discountInfoElement.style.display = "block"
+        discountMessageElement.textContent =
+          discountedPurchase.discount_message ||
+          `You saved $${discountedPurchase.discount_amount.toFixed(2)} with our ${discountedPurchase.discount_percentage}% category discount!`
+      }
+    }
+
+    // Remove successful purchases from cart
+    if (successfulPurchases.length === cartItems.length) {
+      clearCart()
+    } else {
+      // Remove only successful purchases
+      const successfulIds = successfulPurchases.map((result) => result.book_id)
+      cartItems = cartItems.filter((item) => !successfulIds.includes(item.id))
+      saveCartToLocalStorage()
+      updateCartDisplay()
+      updateCartBadge()
+    }
+
+    // Show success modal with proper event handling
+    const successModalElement = document.getElementById("purchaseSuccessModal")
+
+    // Ensure any existing modal instance is disposed before creating a new one
+    const existingSuccessModal = bootstrap.Modal.getInstance(successModalElement)
+    if (existingSuccessModal) {
+      try {
+        existingSuccessModal.dispose()
+      } catch (e) {
+        console.log("Success modal already disposed")
+      }
+    }
+
+    const successModal = new bootstrap.Modal(successModalElement)
+
+    // Add event listener for when modal is hidden
+    successModalElement.addEventListener(
+      "hidden.bs.modal",
+      () => {
+        // Reset UI state after modal is closed
+        resetUIState()
+        // Allow time for the DOM to update
+        setTimeout(() => {
+          try {
+            successModal.dispose()
+          } catch (e) {
+            console.log("Success modal already disposed")
+          }
+        }, 300)
+      },
+      { once: true },
+    ) // Use once:true so event listener is automatically removed after execution
+
+    successModal.show()
+
+    showToast(`Successfully purchased ${successfulPurchases.length} item(s)!`, "success", 5000)
+  }
+
+  if (failedPurchases.length > 0) {
+    const errorMessage = document.getElementById("errorMessage")
+    if (errorMessage) {
+      errorMessage.textContent =
+        failedPurchases.length === 1
+          ? `Failed to purchase "${failedPurchases[0].book?.title}": ${failedPurchases[0].error}`
+          : `Failed to purchase ${failedPurchases.length} item(s). Please try again.`
+    }
+
+    const errorModalElement = document.getElementById("purchaseErrorModal")
+
+    // Ensure any existing modal instance is disposed before creating a new one
+    const existingErrorModal = bootstrap.Modal.getInstance(errorModalElement)
+    if (existingErrorModal) {
+      try {
+        existingErrorModal.dispose()
+      } catch (e) {
+        console.log("Error modal already disposed")
+      }
+    }
+
+    const errorModal = new bootstrap.Modal(errorModalElement)
+
+    // Add event listener for when modal is hidden
+    errorModalElement.addEventListener(
+      "hidden.bs.modal",
+      () => {
+        // Reset UI state after modal is closed
+        resetUIState()
+        // Allow time for the DOM to update
+        setTimeout(() => {
+          try {
+            errorModal.dispose()
+          } catch (e) {
+            console.log("Error modal already disposed")
+          }
+        }, 300)
+      },
+      { once: true },
+    ) // Use once:true so event listener is automatically removed after execution
+
+    errorModal.show()
+  }
 }
 
 /**
  * Display special offers in the UI
  */
 function displaySpecialOffers() {
-    const offersList = getSpecialOffers();
-    const specialOffersElements = document.querySelectorAll('.special-offers-container');
-    
-    specialOffersElements.forEach(container => {
-        container.innerHTML = '';
-        
-        if (offersList.length > 0) {
-            const offerElement = document.createElement('div');
-            offerElement.className = 'alert alert-info';
-            offerElement.innerHTML = `
+  const offersList = getSpecialOffers()
+  const specialOffersElements = document.querySelectorAll(".special-offers-container")
+  specialOffersElements.forEach((container) => {
+    container.innerHTML = ""
+    if (offersList.length > 0) {
+      const offerElement = document.createElement("div")
+      offerElement.className = "alert alert-info"
+      offerElement.innerHTML = `
                 <h6 class="alert-heading"><i class="bi bi-tags-fill"></i> Special Offers Available!</h6>
                 <ul class="mb-0 small">
-                    ${offersList.map(offer => `<li>${offer}</li>`).join('')}
+                    ${offersList.map((offer) => `<li>${offer}</li>`).join("")}
                 </ul>
-            `;
-            container.appendChild(offerElement);
-        }
-    });
+            `
+      container.appendChild(offerElement)
+    }
+  })
 }
-
-// Initialize special offers display and cart when page loads
-document.addEventListener('DOMContentLoaded', () => {
-    displaySpecialOffers();
-    updateCartDisplay(); // Update cart display with items from localStorage
-});
 
 /**
  * Show a toast notification
@@ -466,11 +585,20 @@ document.addEventListener('DOMContentLoaded', () => {
  * @param {number} duration - How long to show the toast in milliseconds
  * @returns {HTMLElement} - The toast container element
  */
-function showToast(message, type = 'success', duration = 3000) {
-    const toastContainer = document.createElement('div');
-    toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
-    toastContainer.style.zIndex = '11';
-    toastContainer.innerHTML = `
+function showToast(message, type = "success", duration = 3000) {
+  // Use the showToast function from main.js if available
+  if (window.showToast) {
+    return window.showToast(message, type, duration)
+  }
+
+  // Fallback implementation
+  console.log(`Toast: ${message} (${type})`)
+
+  // Create toast container
+  const toastContainer = document.createElement("div")
+  toastContainer.className = "position-fixed bottom-0 end-0 p-3 toast-container"
+  toastContainer.style.zIndex = "11"
+  toastContainer.innerHTML = `
         <div class="toast align-items-center text-white bg-${type}" role="alert" aria-live="assertive" aria-atomic="true">
             <div class="d-flex">
                 <div class="toast-body">
@@ -479,33 +607,64 @@ function showToast(message, type = 'success', duration = 3000) {
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
             </div>
         </div>
-    `;
-    document.body.appendChild(toastContainer);
-    
-    const toast = new bootstrap.Toast(toastContainer.querySelector('.toast'), {
-        delay: duration
-    });
-    toast.show();
-    
-    // Remove the toast after it's hidden
-    toastContainer.querySelector('.toast').addEventListener('hidden.bs.toast', () => {
-        toastContainer.remove();
-    });
-    
-    return toastContainer;
+    `
+  document.body.appendChild(toastContainer)
+
+  const toast = new bootstrap.Toast(toastContainer.querySelector(".toast"), {
+    delay: duration,
+  })
+  toast.show()
+
+  toastContainer.querySelector(".toast").addEventListener("hidden.bs.toast", () => {
+    toastContainer.remove()
+  })
+
+  return toastContainer
 }
 
+/**
+ * Update the cart badge in the UI
+ */
+function updateCartBadge() {
+  const cartBadge = document.getElementById("cartBadge")
+  if (!cartBadge) return
+
+  // If items have quantity property, use it, otherwise count each item as 1
+  const totalItems =
+    cartItems.length > 0 && cartItems[0].quantity
+      ? cartItems.reduce((sum, item) => sum + item.quantity, 0)
+      : cartItems.length
+
+  cartBadge.textContent = totalItems
+  cartBadge.style.display = totalItems > 0 ? "inline-block" : "none"
+}
+
+// Add event listeners to modal close buttons to ensure proper cleanup
+document.addEventListener("DOMContentLoaded", () => {
+  // Add event listeners to all modal close buttons
+  document.querySelectorAll('[data-bs-dismiss="modal"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      // Reset UI state when any modal is manually closed
+      setTimeout(resetUIState, 300)
+    })
+  })
+
+  // Add event listener to continue shopping button in success modal
+  const continueShoppingBtn = document.querySelector("#purchaseSuccessModal .btn-primary")
+  if (continueShoppingBtn) {
+    continueShoppingBtn.addEventListener("click", () => {
+      resetUIState()
+    })
+  }
+})
+
 // Export functions for use in other scripts
-window.specialOffers = {
-    addToCart,
-    removeFromCart,
-    clearCart,
-    calculateTotal,
-    checkout,
-    displaySpecialOffers,
-    getSpecialOffers,
-    showToast,
-    getCartItems: function() {
-        return cartItems;
-    }
-};
+window.addToCart = addToCart
+window.removeFromCart = removeFromCart
+window.clearCart = clearCart
+window.checkout = checkout
+window.getCartItems = getCartItems
+window.updateCartDisplay = updateCartDisplay
+window.showToast = showToast
+window.updateCartBadge = updateCartBadge
+window.resetUIState = resetUIState // Export the resetUIState function for use in other scripts
