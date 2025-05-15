@@ -1,0 +1,145 @@
+pipeline {
+    agent any
+    
+    environment {
+        // Docker registry credentials
+        DOCKER_REGISTRY = 'youssefashraf265' // Replace with your Docker registry
+        DOCKER_CREDENTIALS_ID = 'docker-credentials-id' // Replace with your Jenkins credentials ID
+        
+        // Kubernetes configuration
+        KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-credentials-id' // Replace with your Jenkins credentials ID
+        
+        // Application version/tag
+        APP_VERSION = "${env.BUILD_NUMBER}"
+        
+        // Docker image names
+        CATALOG_IMAGE = "${DOCKER_REGISTRY}/bazarstore-catalog:${APP_VERSION}"
+        ORDER_IMAGE = "${DOCKER_REGISTRY}/bazarstore-order:${APP_VERSION}"
+        CORE_IMAGE = "${DOCKER_REGISTRY}/bazarstore-core:${APP_VERSION}"
+        POSTGRES_IMAGE = "postgres:13" // Using official PostgreSQL image
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build Docker Images') {
+            parallel {
+                stage('Build Catalog Service') {
+                    steps {
+                        dir('catalog') {
+                            sh "docker build -t ${CATALOG_IMAGE} ."
+                        }
+                    }
+                }
+                
+                stage('Build Order Service') {
+                    steps {
+                        dir('order') {
+                            sh "docker build -t ${ORDER_IMAGE} ."
+                        }
+                    }
+                }
+                
+                stage('Build Core Service') {
+                    steps {
+                        dir('core') {
+                            sh "docker build -t ${CORE_IMAGE} ."
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Push Docker Images') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: DOCKER_CREDENTIALS_ID, passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
+                    sh "docker login ${DOCKER_REGISTRY} -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}"
+                    sh "docker push ${CATALOG_IMAGE}"
+                    sh "docker push ${ORDER_IMAGE}"
+                    sh "docker push ${CORE_IMAGE}"
+                }
+            }
+        }
+        
+        stage('Update Kubernetes Manifests') {
+            steps {
+                // Update image tags in deployment files
+                sh "sed -i 's|image: .*bazarstore-catalog:.*|image: ${CATALOG_IMAGE}|' kubernetes/prod/catalog/catalog-dep.yaml"
+                sh "sed -i 's|image: .*bazarstore-order:.*|image: ${ORDER_IMAGE}|' kubernetes/prod/order/order-dep.yaml"
+                sh "sed -i 's|image: .*bazarstore-core:.*|image: ${CORE_IMAGE}|' kubernetes/prod/core/core-dep.yaml"
+            }
+        }
+        
+        stage('Deploy to Kubernetes') {
+            steps {
+                withCredentials([file(credentialsId: KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+                    // Create namespace if it doesn't exist
+                    sh 'kubectl apply -f kubernetes/prod/namespace/prod_namespace.yaml'
+                    
+                    // Apply ConfigMaps and Secrets
+                    sh 'kubectl apply -f kubernetes/prod/config/prod-configmap.yaml'
+                    sh 'kubectl apply -f kubernetes/prod/secrets/secrets.yaml'
+                    
+                    // Apply Storage resources
+                    sh 'kubectl apply -f kubernetes/prod/postgres/postgres-pv.yaml'
+                    sh 'kubectl apply -f kubernetes/prod/postgres/postgres-pvc.yaml'
+                    
+                    // Deploy PostgreSQL
+                    sh 'kubectl apply -f kubernetes/prod/postgres/postgres-service.yaml'
+                    sh 'kubectl apply -f kubernetes/prod/postgres/postgres-dep.yaml'
+                    
+                    // Wait for PostgreSQL to be ready
+                    sh 'kubectl wait --namespace=bazarstore-prod --for=condition=ready pod -l app=postgres --timeout=300s'
+                    
+                    // Deploy microservices
+                    sh 'kubectl apply -f kubernetes/prod/catalog/catalog-serivce.yaml'
+                    sh 'kubectl apply -f kubernetes/prod/catalog/catalog-dep.yaml'
+                    
+                    sh 'kubectl apply -f kubernetes/prod/order/order-service.yaml'
+                    sh 'kubectl apply -f kubernetes/prod/order/order-dep.yaml'
+                    
+                    sh 'kubectl apply -f kubernetes/prod/core/core-service.yaml'
+                    sh 'kubectl apply -f kubernetes/prod/core/core-dep.yaml'
+                    
+                    // Deploy Ingress last
+                    sh 'kubectl apply -f kubernetes/prod/ingress/ingress.yaml'
+                }
+            }
+        }
+        
+        stage('Verify Deployment') {
+            steps {
+                withCredentials([file(credentialsId: KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+                    // Check if all pods are running
+                    sh 'kubectl get pods -n bazarstore-prod'
+                    
+                    // Wait for all deployments to be ready
+                    sh 'kubectl wait --namespace=bazarstore-prod --for=condition=available deployment --all --timeout=300s'
+                    
+                    // Get service endpoints
+                    sh 'kubectl get svc -n bazarstore-prod'
+                    
+                    // Get ingress details
+                    sh 'kubectl get ingress -n bazarstore-prod'
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'Deployment to production completed successfully!'
+        }
+        failure {
+            echo 'Deployment to production failed!'
+        }
+        always {
+            // Clean up local Docker images to save space
+            sh "docker rmi ${CATALOG_IMAGE} ${ORDER_IMAGE} ${CORE_IMAGE} || true"
+        }
+    }
+}

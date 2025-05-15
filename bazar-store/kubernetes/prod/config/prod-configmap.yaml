@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bazarstore-config
+  namespace: bazarstore-prod
+  labels:
+    environment: production
+data:
+  catalog-db-url: "postgresql://postgres:postgres@postgres:5432/bazarcom"
+  order-db-url: "postgresql://postgres:postgres@postgres:5432/bazarcom"
