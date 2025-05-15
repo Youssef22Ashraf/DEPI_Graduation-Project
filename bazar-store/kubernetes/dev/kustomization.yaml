@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bazarstore-dev
+
+resources:
+  - database/postgres-deployment.yaml
+  - services/catalog-deployment.yaml
+  - services/order-deployment.yaml
+  - services/core-deployment.yaml
+  - config/configmap.yaml
+  - config/secrets.yaml
+  - ingress/ingress.yaml
