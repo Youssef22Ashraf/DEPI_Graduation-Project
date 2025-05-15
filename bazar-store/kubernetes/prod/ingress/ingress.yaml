@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bazarstore-ingress
+  namespace: bazarstore-prod
+  labels:
+    environment: production
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    kubernetes.io/ingress.class: "nginx"
+    # Add EKS-specific annotations for AWS ALB Ingress Controller
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  rules:
+  - host: prod.bazarstore.com # Should be configured as an environment variable in a production environment
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: core
+            port:
+              number: 80
+      - path: /api/catalog
+        pathType: Prefix
+        backend:
+          service:
+            name: catalog
+            port:
+              number: 5000
+      - path: /api/order
+        pathType: Prefix
+        backend:
+          service:
+            name: order
+            port:
+              number: 5001

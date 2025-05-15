@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core
+  namespace: bazarstore-prod
+  labels:
+    app: core
+    environment: production
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: core
+  template:
+    metadata:
+      labels:
+        app: core
+    spec:
+      containers:
+      - name: core
+        image: youssefashraf265/bazarcom-core:latest
+        ports:
+        - containerPort: 5005
+        env:
+        - name: DOCKER_ENV
+          value: "true"
+        - name: CATALOG_SERVICE_URL
+          value: "http://catalog:5000"
+        - name: ORDER_SERVICE_URL
+          value: "http://order:5001"
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5005
+          initialDelaySeconds: 5
+          periodSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5005
+          initialDelaySeconds: 30
+          periodSeconds: 15
